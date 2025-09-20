@@ -3,7 +3,6 @@
   "tasks": {
     "build": {
       "dependsOn": [
-        "prebuild",
         "^build"
       ],
       "outputs": [
@@ -11,7 +10,6 @@
         "dist/**"
       ]
     },
-    "prebuild": {},
     "lint": {},
     "check-types": {}
   }

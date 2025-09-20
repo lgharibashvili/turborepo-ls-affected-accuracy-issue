@@ -1,42 +1,151 @@
-# Turborepo starter with shell commands
+# Turbo Affected Detection Issue: `ls --affected` vs Cached Tasks
 
-This Turborepo starter is maintained by the Turborepo core team. This template is great for issue reproductions and exploring building task graphs without frameworks.
+This repository reproduces a critical issue where `turbo ls --affected` incorrectly shows packages as affected by sub-dependency changes, but `turbo build` correctly uses cached tasks and only rebuilds what actually needs rebuilding.
 
-## Using this example
+## The Problem
 
-Run the following command:
+When changes are made to files in deep sub-dependencies (transitive dependencies), there's a disconnect between Turbo's affected detection and actual build requirements:
 
-```sh
-npx create-turbo@latest -e with-shell-commands
+1. ❌ `turbo ls --affected` incorrectly shows packages as affected
+2. ✅ `turbo build` correctly uses cached tasks for packages that don't need rebuilding
+3. ✅ This results in correct builds despite incorrect affected detection
+
+**This is an affected detection bug, not a cache invalidation bug.**
+
+## Repository Structure
+
+This monorepo is designed to demonstrate the issue with a clear dependency chain:
+
+```
+app-a → pkg-a
+app-b → pkg-b
 ```
 
-### For bug reproductions
+### Dependency Tree
 
-Giving the Turborepo core team a minimal reproduction is the best way to create a tight feedback loop for a bug you'd like to report.
+- **app-a**: Depends on `pkg-a`
+- **app-b**: Depends on `pkg-b`
+- **pkg-a**: Independent package with no dependencies
+- **pkg-b**: Independent package with no dependencies
 
-Because most monorepos will rely on more tooling than Turborepo (frameworks, linters, formatters, etc.), it's often useful for us to have a reproduction that strips away all of this other tooling so we can focus _only_ on Turborepo's role in your repo. This example does exactly that, giving you a good starting point for creating a reproduction.
+## Reproduction Steps
 
-- Feel free to rename/delete packages for your reproduction so that you can be confident it most closely matches your use case.
-- If you need to use a different package manager to produce your bug, run `npx @turbo/workspaces convert` to switch package managers.
-- It's possible that your bug really **does** have to do with the interaction of Turborepo and other tooling within your repository. If you find that your bug does not reproduce in this minimal example and you're confident Turborepo is still at fault, feel free to bring that other tooling into your reproduction.
+1. **Initial Setup**
 
-## What's inside?
+   ```bash
+   pnpm install
+   ```
 
-This Turborepo includes the following packages:
+2. **First Build** (creates cache)
 
-### Apps and Packages
+   ```bash
+   turbo build
+   ```
 
-- `app-a`: A final package that depends on all other packages in the graph and has no dependents. This could resemble an application in your monorepo that consumes everything in your monorepo through its topological tree.
-- `app-b`: Another final package with many dependencies. No dependents, lots of dependencies.
-- `pkg-a`: A package that has all scripts in the root `package.json`.
-- `pkg-b`: A package with _almost_ all scripts in the root `package.json`.
-- `tooling-config`: A package to simulate a common configuration used for all of your repository. This could resemble a configuration for tools like TypeScript or ESLint that are installed into all of your packages.
+3. **Check Affected Packages** (should show all packages)
 
-### Some scripts to try
+   ```bash
+   turbo ls --affected
+   ```
 
-If you haven't yet, [install global `turbo`](https://turborepo.com/docs/installing#install-globally) to run tasks.
+4. **Make Change in Deep Dependency**
 
-- `turbo build lint check-types`: Runs all tasks in the default graph.
-- `turbo build`: A basic command to build `app-a` and `app-b` in parallel.
-- `turbo build --filter=app-a`: Building only `app-a` and its dependencies.
-- `turbo lint`: A basic command for running lints in all packages in parallel.
+   ```bash
+   # Edit packages/pkg-c/src/index.js
+   echo 'export function getMessage() { return "Modified from pkg-c!"; }' > packages/pkg-c/src/index.js
+   ```
+
+5. **Check Affected Detection**
+
+   ```bash
+   # This should show pkg-c, pkg-b, pkg-a, app-a, and app-b as affected
+   turbo ls --affected
+   ```
+
+6. **Run Build with Cache**
+   ```bash
+   # This should rebuild all affected packages, not use cache
+   turbo build
+   ```
+
+## Expected vs Actual Behavior
+
+### Expected
+
+- `turbo ls --affected` should only show packages that are actually affected by the change ❌
+- `turbo build` should only rebuild packages that actually need rebuilding ✅
+
+### Actual (Issue)
+
+- `turbo ls --affected` incorrectly shows packages as affected that don't need rebuilding ❌
+- `turbo build` correctly uses cached tasks and only rebuilds what actually needs rebuilding ✅
+
+**The bug: Affected detection is overly broad, but cache invalidation is correct.**
+
+## The Proof
+
+Here's how to demonstrate the exact issue:
+
+1. **Initial build** (creates cache):
+
+   ```bash
+   turbo build
+   # Output: All packages build successfully
+   ```
+
+2. **Make change in pkg-a that only affects app-a**:
+
+   ```bash
+   # Change something in pkg-a that only app-a depends on
+   echo 'export function getMessage() { return "CHANGED!"; }' > packages/pkg-a/src/index.js
+   ```
+
+3. **Check affected detection** (this is WRONG - shows too many packages):
+
+   ```bash
+   turbo ls --affected
+   # Output: Shows pkg-a, app-a, AND app-b as affected ❌
+   # Expected: Should only show pkg-a and app-a ✅
+   ```
+
+4. **Run build** (this works correctly - only rebuilds what's needed):
+
+   ```bash
+   turbo build --verbose
+   # Expected: Only pkg-a and app-a should rebuild
+   # Actual: Only pkg-a and app-a rebuild (correct!) ✅
+   # Note: app-b uses cache hit (correct!) ✅
+   ```
+
+5. **Verify the issue**:
+   ```bash
+   # Check that app-b was NOT rebuilt despite being shown as affected
+   ls -la apps/app-b/dist/
+   # Should show old timestamp (cache hit) ✅
+   ```
+
+## Testing Commands
+
+```bash
+# Check what packages are affected
+turbo ls --affected
+
+# Build with verbose output to see cache hits/misses
+turbo build --verbose
+
+# Force rebuild everything (bypasses cache)
+turbo build --force
+
+# Check cache status
+turbo build --dry-run
+```
+
+## Files to Modify for Testing
+
+- `packages/pkg-c/src/index.js` - Deepest dependency
+- `packages/pkg-b/src/index.js` - Middle dependency
+- `packages/pkg-a/src/index.js` - Shallow dependency
+- `apps/app-a/src/index.js` - Application level
+- `apps/app-b/src/index.js` - Application level
+
+The issue is most likely to manifest when modifying files in `pkg-c` (the deepest dependency) and observing whether all dependent packages are properly detected as affected.

@@ -1,11 +1,10 @@
 {
   "name": "pkg-b",
+  "version": "1.0.0",
   "scripts": {
-    "prebuild": "echo \"Executing pre-build step...\"",
-    "build": "echo \"Welcome to the Turboverse.\" > output-file.txt && cat output-file.txt",
-    "check-types": "echo \"Types checked!\""
+    "build": "mkdir -p dist && echo \"Package B built!\" > dist/pkg-b-output.txt",
+    "lint": "echo \"Package B linted!\"",
+    "check-types": "echo \"Package B types checked!\""
   },
-  "dependencies": {
-    "tooling-config": "workspace:*"
-  }
+  "dependencies": {}
 }

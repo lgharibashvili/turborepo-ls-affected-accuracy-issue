@@ -1,8 +1,14 @@
 {
   "name": "my-turborepo",
-  "description": "A barebones Turborepo example for working with Task Graphs.",
+  "description": "A barebones Turborepo example to reproduce ls --affected issue.",
   "private": true,
-  "packageManager": "pnpm@8.15.6",
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "clean": "turbo clean"
+  },
   "devDependencies": {
     "turbo": "^2.5.6"
   }
