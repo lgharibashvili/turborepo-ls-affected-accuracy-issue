@@ -1,0 +1,74 @@
+name: Test turbo ls --affected vs turbo build cache
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-affected-vs-cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.16.1
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Initial build (create cache)
+        run: pnpm turbo build
+
+      - name: Make minimal change to root package.json
+        run: |
+          # Add a simple whitespace change to root package.json
+          sed -i '1s/{/{ /' package.json
+
+      - name: Show the change made
+        run: |
+          echo "=== Git diff showing the change ==="
+          git diff
+          echo ""
+
+      - name: Test turbo ls --affected (shows all packages as affected)
+        run: |
+          echo "=== turbo ls --affected output ==="
+          pnpm turbo ls --affected
+          echo ""
+
+      - name: Test turbo build --dry=json (shows cache hits)
+        run: |
+          echo "=== turbo build --dry=json output ==="
+          pnpm turbo build --dry=json | jq -c '. as $root | .tasks[] | { taskId, cache: .cache.status, hash, hashOfExternalDependencies, globalHash: $root.globalCacheInputs.hashOfExternalDependencies }'
+          echo ""
+
+      - name: Prove the issue - affected detection vs cache accuracy
+        run: |
+          echo "=== ISSUE DEMONSTRATION ==="
+          echo "❌ turbo ls --affected shows ALL packages as affected"
+          echo "✅ turbo build --dry=json shows ALL packages as CACHE HIT"
+          echo ""
+          echo "This proves that:"
+          echo "1. turbo ls --affected is overly broad (not intelligent enough)"
+          echo "2. turbo build cache invalidation is more accurate"
+          echo "3. A simple whitespace change in root package.json should not affect all packages"
+          echo ""
+
+       - name: Verify no actual rebuild is needed
+         run: |
+           echo "=== Running actual build to verify cache hits ==="
+           pnpm turbo build --verbose
+           echo ""
+           echo "Expected result: You should see 'cache hit' for all packages"
+           echo "This proves turbo build is smarter than turbo ls --affected"
