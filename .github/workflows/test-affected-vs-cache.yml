@@ -53,7 +53,7 @@ jobs:
           pnpm turbo build --dry=json | jq -c '. as $root | .tasks[] | { taskId, cache: .cache.status, hash, hashOfExternalDependencies, globalHash: $root.globalCacheInputs.hashOfExternalDependencies }'
           echo ""
 
-      - name: Prove the issue - affected detection vs cache accuracy
+      - name: Prove the issue - previous steps demonstrate ls --affected VS build --dry=json cache accuracy
         run: |
           echo "=== ISSUE DEMONSTRATION ==="
           echo "❌ turbo ls --affected shows ALL packages as affected"
@@ -65,10 +65,10 @@ jobs:
           echo "3. A simple whitespace change in root package.json should not affect all packages"
           echo ""
 
-      - name: Verify no actual rebuild is needed
+      - name: EXTRA -Verify no actual rebuild is needed
         run: |
-          echo "=== Running actual build to verify cache hits ==="
-          pnpm turbo build --verbose
+          echo "=== Running actual build to double check cache hits ==="
+          pnpm turbo build --verbosity=2
           echo ""
           echo "Expected result: You should see 'cache hit' for all packages"
           echo "This proves turbo build is smarter than turbo ls --affected"
