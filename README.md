@@ -1,4 +1,4 @@
-# Turborepo `ls --affected` Accuracy Issue - Reproduction
+# Turborepo `ls --affected` Accuracy Issue
 
 This repository reproduces a critical issue where `turbo ls --affected` is not as accurate as `turbo build --dry=json` in detecting which packages are actually affected by changes.
 
@@ -8,28 +8,9 @@ This repository reproduces a critical issue where `turbo ls --affected` is not a
 
 **Any random change to the root `package.json` file triggers this issue.** Even a simple whitespace change causes `turbo ls --affected` to incorrectly show ALL packages as affected, while `turbo build` correctly determines that no packages actually need rebuilding.
 
-This demonstrates a disconnect between Turbo's `ls --affected` detection and turbo `build` output:
-
-1. ❌ `turbo ls --affected` incorrectly shows packages as affected
-2. ✅ `turbo build` correctly uses cached tasks for packages that don't need rebuilding
+This demonstrates a disconnect between Turbo's `ls --affected` detection and turbo `build --dry=json` cache status output.
 
 **This is an affected detection bug, not a cache invalidation bug.**
-
-## Repository Structure
-
-This monorepo is designed to demonstrate the issue with a clear dependency chain:
-
-```
-app-a → pkg-a
-app-b → pkg-b
-```
-
-### Dependency Tree
-
-- **app-a**: Depends on `pkg-a`
-- **app-b**: Depends on `pkg-b`
-- **pkg-a**: Independent package with no dependencies
-- **pkg-b**: Independent package with no dependencies
 
 ## Expected vs Actual Behavior
 
@@ -45,20 +26,17 @@ app-b → pkg-b
 
 **The bug: Affected detection is overly broad, but cache invalidation is correct.**
 
-## The Proof
+## Reproduction scenario
 
-Here's how to demonstrate the exact issue with real terminal output:
+Here's how to demonstrate the exact issue:
 
 ### Step 1: Make a minimal change to root package.json
 
 ```bash
-# Add a simple whitespace change to root package.json
-# Option 1: Using sed (works on Linux, macOS, and Windows with WSL/Git Bash)
+# Option 1: Using sed
 sed -i '' '1s/{/ {/' package.json
 
-# Option 2: Manual edit - just add a space before the opening brace on line 1
-# Change: {
-# To:     {
+# Option 2: Manual edit - just add a space before the opening brace on line 1 (or anywhere ><)
 ```
 
 ### Step 2: Show the change made
