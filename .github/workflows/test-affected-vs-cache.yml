@@ -65,10 +65,10 @@ jobs:
           echo "3. A simple whitespace change in root package.json should not affect all packages"
           echo ""
 
-       - name: Verify no actual rebuild is needed
-         run: |
-           echo "=== Running actual build to verify cache hits ==="
-           pnpm turbo build --verbose
-           echo ""
-           echo "Expected result: You should see 'cache hit' for all packages"
-           echo "This proves turbo build is smarter than turbo ls --affected"
+      - name: Verify no actual rebuild is needed
+        run: |
+          echo "=== Running actual build to verify cache hits ==="
+          pnpm turbo build --verbose
+          echo ""
+          echo "Expected result: You should see 'cache hit' for all packages"
+          echo "This proves turbo build is smarter than turbo ls --affected"

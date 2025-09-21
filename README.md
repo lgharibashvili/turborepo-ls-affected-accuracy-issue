@@ -1,14 +1,17 @@
-# Turbo Affected Detection Issue: `ls --affected` vs Cached Tasks
+# Turborepo `ls --affected` Accuracy Issue - Reproduction
 
-This repository reproduces a critical issue where `turbo ls --affected` incorrectly shows packages as affected by sub-dependency changes, but `turbo build` correctly uses cached tasks and only rebuilds what actually needs rebuilding.
+This repository reproduces a critical issue where `turbo ls --affected` is not as accurate as `turbo build --dry=json` in detecting which packages are actually affected by changes.
+
+> **Note**: According to [Turborepo 2.1](https://turborepo.com/blog/turbo-2-1-0#turbo-ls) release note, `turbo ls --affected --output=json` was introduced as a recommended replacement for `turbo build --dry=json` when you only need to retrieve a list of changed packages.
 
 ## The Problem
 
-When changes are made to files in deep sub-dependencies (transitive dependencies), there's a disconnect between Turbo's affected detection and actual build requirements:
+**Any random change to the root `package.json` file triggers this issue.** Even a simple whitespace change causes `turbo ls --affected` to incorrectly show ALL packages as affected, while `turbo build` correctly determines that no packages actually need rebuilding.
+
+This demonstrates a disconnect between Turbo's `ls --affected` detection and turbo `build` output:
 
 1. ❌ `turbo ls --affected` incorrectly shows packages as affected
 2. ✅ `turbo build` correctly uses cached tasks for packages that don't need rebuilding
-3. ✅ This results in correct builds despite incorrect affected detection
 
 **This is an affected detection bug, not a cache invalidation bug.**
 
@@ -28,52 +31,12 @@ app-b → pkg-b
 - **pkg-a**: Independent package with no dependencies
 - **pkg-b**: Independent package with no dependencies
 
-## Reproduction Steps
-
-1. **Initial Setup**
-
-   ```bash
-   pnpm install
-   ```
-
-2. **First Build** (creates cache)
-
-   ```bash
-   turbo build
-   ```
-
-3. **Check Affected Packages** (should show all packages)
-
-   ```bash
-   turbo ls --affected
-   ```
-
-4. **Make Change in Deep Dependency**
-
-   ```bash
-   # Edit packages/pkg-c/src/index.js
-   echo 'export function getMessage() { return "Modified from pkg-c!"; }' > packages/pkg-c/src/index.js
-   ```
-
-5. **Check Affected Detection**
-
-   ```bash
-   # This should show pkg-c, pkg-b, pkg-a, app-a, and app-b as affected
-   turbo ls --affected
-   ```
-
-6. **Run Build with Cache**
-   ```bash
-   # This should rebuild all affected packages, not use cache
-   turbo build
-   ```
-
 ## Expected vs Actual Behavior
 
 ### Expected
 
-- `turbo ls --affected` should only show packages that are actually affected by the change ❌
-- `turbo build` should only rebuild packages that actually need rebuilding ✅
+- `turbo ls --affected` should only show packages that are actually affected by the change.
+- `turbo build` should only rebuild packages that actually need rebuilding.
 
 ### Actual (Issue)
 
@@ -84,68 +47,82 @@ app-b → pkg-b
 
 ## The Proof
 
-Here's how to demonstrate the exact issue:
+Here's how to demonstrate the exact issue with real terminal output:
 
-1. **Initial build** (creates cache):
-
-   ```bash
-   turbo build
-   # Output: All packages build successfully
-   ```
-
-2. **Make change in pkg-a that only affects app-a**:
-
-   ```bash
-   # Change something in pkg-a that only app-a depends on
-   echo 'export function getMessage() { return "CHANGED!"; }' > packages/pkg-a/src/index.js
-   ```
-
-3. **Check affected detection** (this is WRONG - shows too many packages):
-
-   ```bash
-   turbo ls --affected
-   # Output: Shows pkg-a, app-a, AND app-b as affected ❌
-   # Expected: Should only show pkg-a and app-a ✅
-   ```
-
-4. **Run build** (this works correctly - only rebuilds what's needed):
-
-   ```bash
-   turbo build --verbose
-   # Expected: Only pkg-a and app-a should rebuild
-   # Actual: Only pkg-a and app-a rebuild (correct!) ✅
-   # Note: app-b uses cache hit (correct!) ✅
-   ```
-
-5. **Verify the issue**:
-   ```bash
-   # Check that app-b was NOT rebuilt despite being shown as affected
-   ls -la apps/app-b/dist/
-   # Should show old timestamp (cache hit) ✅
-   ```
-
-## Testing Commands
+### Step 1: Make a minimal change to root package.json
 
 ```bash
-# Check what packages are affected
-turbo ls --affected
+# Add a simple whitespace change to root package.json
+# Option 1: Using sed (works on Linux, macOS, and Windows with WSL/Git Bash)
+sed -i '' '1s/{/ {/' package.json
 
-# Build with verbose output to see cache hits/misses
-turbo build --verbose
-
-# Force rebuild everything (bypasses cache)
-turbo build --force
-
-# Check cache status
-turbo build --dry-run
+# Option 2: Manual edit - just add a space before the opening brace on line 1
+# Change: {
+# To:     {
 ```
 
-## Files to Modify for Testing
+### Step 2: Show the change made
 
-- `packages/pkg-c/src/index.js` - Deepest dependency
-- `packages/pkg-b/src/index.js` - Middle dependency
-- `packages/pkg-a/src/index.js` - Shallow dependency
-- `apps/app-a/src/index.js` - Application level
-- `apps/app-b/src/index.js` - Application level
+```bash
+git diff
+```
 
-The issue is most likely to manifest when modifying files in `pkg-c` (the deepest dependency) and observing whether all dependent packages are properly detected as affected.
+**Output:**
+
+```diff
+diff --git a/package.json b/package.json
+index 98995f1..68508df 100644
+--- a/package.json
++++ b/package.json
+@@ -1,4 +1,4 @@
+-{
++ {
+   "name": "my-turborepo",
+   "description": "A barebones Turborepo example to reproduce ls --affected issue.",
+   "private": true,
+```
+
+### Step 3: Check affected detection (WRONG - shows all packages as affected)
+
+```bash
+pnpm turbo ls --affected
+```
+
+**Output:**
+
+```
+turbo 2.5.6
+
+4 packages (pnpm9)
+
+  app-a apps/app-a
+  app-b apps/app-b
+  pkg-a packages/pkg-a
+  pkg-b packages/pkg-b
+```
+
+❌ **Problem**: Shows ALL packages as affected by a simple whitespace change!
+
+### Step 4: Check build cache status (CORRECT - shows cache hits)
+
+```bash
+pnpm turbo build --dry=json | jq -c '. as $root | .tasks[] | { taskId, cache: .cache.status, hash, hashOfExternalDependencies, globalHash: $root.globalCacheInputs.hashOfExternalDependencies }'
+```
+
+**Output:**
+
+```json
+{"taskId":"app-a#build","cache":"HIT","hash":"d890f3e9895f4caf","hashOfExternalDependencies":"459c029558afe716","globalHash":"9571602318428969"}
+{"taskId":"app-b#build","cache":"HIT","hash":"6ba8642a6b6e0b1e","hashOfExternalDependencies":"16b6eadd7e59624e","globalHash":"9571602318428969"}
+{"taskId":"pkg-a#build","cache":"HIT","hash":"fd10ee1c334b618a","hashOfExternalDependencies":"459c029558afe716","globalHash":"9571602318428969"}
+{"taskId":"pkg-b#build","cache":"HIT","hash":"ad647a23af143f93","hashOfExternalDependencies":"459c029558afe716","globalHash":"9571602318428969"}
+```
+
+✅ **Correct**: All packages show `"cache":"HIT"` - no rebuild needed!
+
+### The Issue Demonstrated
+
+- **`turbo ls --affected`**: Incorrectly shows all 4 packages as affected ❌
+- **`turbo build --dry=json`**: Correctly shows all 4 packages as cache hits ✅
+
+This proves that `turbo build`'s cache invalidation is more accurate than `turbo ls --affected`'s affected detection.
