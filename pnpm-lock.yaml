@@ -12,11 +12,29 @@ importers:
         specifier: ^2.5.6
         version: 2.5.6
 
-  apps/app-a: {}
+  apps/app-a:
+    dependencies:
+      pkg-a:
+        specifier: workspace:*
+        version: link:../../packages/pkg-a
 
-  apps/app-b: {}
+  apps/app-b:
+    dependencies:
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
+      pkg-b:
+        specifier: workspace:*
+        version: link:../../packages/pkg-b
+
+  packages/pkg-a: {}
+
+  packages/pkg-b: {}
 
 packages:
+
+  lodash@4.17.21:
+    resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
 
   turbo-darwin-64@2.5.6:
     resolution: {integrity: sha512-3C1xEdo4aFwMJAPvtlPqz1Sw/+cddWIOmsalHFMrsqqydcptwBfu26WW2cDm3u93bUzMbBJ8k3zNKFqxJ9ei2A==}
@@ -53,6 +71,8 @@ packages:
     hasBin: true
 
 snapshots:
+
+  lodash@4.17.21: {}
 
   turbo-darwin-64@2.5.6:
     optional: true

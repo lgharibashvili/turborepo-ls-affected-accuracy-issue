@@ -6,6 +6,7 @@
     "check-types": "echo \"Types checked!\""
   },
   "dependencies": {
-    "pkg-b": "workspace:*"
+    "pkg-b": "workspace:*",
+    "lodash": "^4.17.21"
   }
 }
