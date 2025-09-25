@@ -52,7 +52,7 @@ jobs:
       - name: Test turbo build --dry=json (shows cache hits)
         run: |
           echo "=== turbo build --dry=json output ==="
-          pnpm turbo build --dry=json | jq -c '. as $root | .tasks[] | { taskId, cache: .cache.status, hash, hashOfExternalDependencies, globalHash: $root.globalCacheInputs.hashOfExternalDependencies }'
+          pnpm turbo build --dry=json --affected | jq -c '. as $root | .tasks[] | { taskId, cache: .cache.status, hash, hashOfExternalDependencies, globalHash: $root.globalCacheInputs.hashOfExternalDependencies }'
           echo ""
 
       - name: Prove the issue - previous steps demonstrate ls --affected VS build --dry=json cache accuracy
